@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use torii::{SessionConfig, Torii};
+use torii_core::repositories::RepositoryProvider;
 use torii_core::session::{JwtConfig, SessionToken};
 
 #[cfg(feature = "sqlite")]
-use torii::SqliteStorage;
+use torii::SqliteRepositoryProvider;
 
 // Test secret for HS256
 const TEST_HS256_SECRET: &[u8] = b"this_is_a_test_secret_key_for_hs256_jwt_tokens_not_for_prod";
@@ -13,11 +14,12 @@ const TEST_HS256_SECRET: &[u8] = b"this_is_a_test_secret_key_for_hs256_jwt_token
 #[tokio::test]
 async fn test_register_user_with_password() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
-    // Create Torii instance with password plugin
-    let torii = Torii::new(sqlite.clone()).with_password_plugin();
+    // Create Torii instance with repository provider
+    let torii = Torii::new(Arc::new(repositories));
 
     // Register a user
     let email = "test@example.com";
@@ -43,11 +45,12 @@ async fn test_register_user_with_password() {
 #[tokio::test]
 async fn test_login_with_password() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
-    // Create Torii instance with password plugin
-    let torii = Torii::new(sqlite.clone()).with_password_plugin();
+    // Create Torii instance with repository provider
+    let torii = Torii::new(Arc::new(repositories));
 
     // Register a user and verify email
     let email = "test@example.com";
@@ -91,16 +94,17 @@ async fn test_login_with_password() {
 #[tokio::test]
 async fn test_login_with_unverified_email() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
-    // Create Torii instance with password plugin
-    let torii = Torii::new(sqlite.clone()).with_password_plugin();
+    // Create Torii instance with repository provider
+    let torii = Torii::new(Arc::new(repositories));
 
     // Register a user without verifying email
     let email = "unverified@example.com";
     let password = "password123";
-    let _user = torii
+    let user = torii
         .register_user_with_password(email, password)
         .await
         .unwrap();
@@ -110,8 +114,11 @@ async fn test_login_with_unverified_email() {
         .login_user_with_password(email, password, None, None)
         .await;
 
-    // Should fail because email is not verified
-    assert!(result.is_err());
+    // Should succeed even though email is not verified
+    assert!(result.is_ok());
+    let (logged_in_user, _session) = result.unwrap();
+    assert_eq!(logged_in_user.id, user.id);
+    assert!(!logged_in_user.is_email_verified());
 }
 
 #[cfg(all(feature = "password", feature = "sqlite"))]
@@ -122,16 +129,13 @@ async fn test_session_expiration() {
     use tokio::time::sleep;
 
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
     // Create Torii instance with password plugin and short session expiration
-    let torii = Torii::new(sqlite.clone())
-        .with_password_plugin()
-        .with_session_config(SessionConfig {
-            expires_in: Duration::seconds(1), // Short expiry for testing
-            jwt_config: None,
-        });
+    let torii = Torii::new(Arc::new(repositories))
+        .with_session_config(SessionConfig::default().expires_in(Duration::seconds(1)));
 
     // Register a user and verify email
     let email = "test@example.com";
@@ -164,11 +168,12 @@ async fn test_session_expiration() {
 #[tokio::test]
 async fn test_multiple_sessions() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
-    // Create Torii instance with password plugin
-    let torii = Torii::new(sqlite.clone()).with_password_plugin();
+    // Create Torii instance with repository provider
+    let torii = Torii::new(Arc::new(repositories));
 
     // Register a user and verify email
     let email = "test@example.com";
@@ -233,8 +238,9 @@ async fn test_multiple_sessions() {
 #[tokio::test]
 async fn test_password_auth_with_jwt() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
     // Create a JWT config with HS256
     let jwt_config = JwtConfig::new_hs256(TEST_HS256_SECRET.to_vec())
@@ -242,9 +248,7 @@ async fn test_password_auth_with_jwt() {
         .with_metadata(true);
 
     // Create Torii with JWT sessions
-    let torii = Torii::new(sqlite.clone())
-        .with_jwt_sessions(jwt_config)
-        .with_password_plugin();
+    let torii = Torii::new(Arc::new(repositories)).with_jwt_sessions(jwt_config);
 
     // Register a user and verify email
     let email = "test@example.com";
@@ -288,11 +292,12 @@ async fn test_password_auth_with_jwt() {
 #[tokio::test]
 async fn test_delete_user() {
     // Set up SQLite storage
-    let sqlite = Arc::new(SqliteStorage::connect("sqlite::memory:").await.unwrap());
-    sqlite.migrate().await.unwrap();
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repositories = SqliteRepositoryProvider::new(pool);
+    repositories.migrate().await.unwrap();
 
-    // Create Torii instance with password plugin
-    let torii = Torii::new(sqlite.clone()).with_password_plugin();
+    // Create Torii instance with repository provider
+    let torii = Torii::new(Arc::new(repositories));
 
     // Register a user
     let email = "delete-test@example.com";

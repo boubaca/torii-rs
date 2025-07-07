@@ -1,3 +1,70 @@
+//! PostgreSQL storage backend for Torii
+//!
+//! This crate provides a PostgreSQL-based storage implementation for the Torii authentication framework.
+//! It includes implementations for all core storage traits and provides a complete authentication
+//! storage solution using PostgreSQL as the underlying database.
+//!
+//! # Features
+//!
+//! - **User Management**: Store and retrieve user accounts with email verification support
+//! - **Session Management**: Handle user sessions with configurable expiration
+//! - **Password Authentication**: Secure password hashing and verification
+//! - **OAuth Integration**: Store OAuth account connections and tokens
+//! - **Passkey Support**: WebAuthn/FIDO2 passkey storage and challenge management
+//! - **Magic Link Authentication**: Generate and verify magic links for passwordless login
+//! - **Database Migrations**: Automatic schema management and upgrades
+//! - **Production Ready**: Designed for high-performance production workloads
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use torii_storage_postgres::PostgresStorage;
+//! use torii_core::UserId;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Connect to PostgreSQL database
+//!     let storage = PostgresStorage::connect("postgresql://user:password@localhost/torii").await?;
+//!     
+//!     // Run migrations to set up the schema
+//!     storage.migrate().await?;
+//!     
+//!     // Use with Torii (PostgresRepositoryProvider not yet implemented)
+//!     // let repositories = std::sync::Arc::new(storage.into_repository_provider());
+//!     // let torii = torii::Torii::new(repositories);
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Current Status
+//!
+//! This crate currently provides the base PostgreSQL storage implementation with user and session
+//! management. The full repository provider implementation is still in development.
+//!
+//! # Storage Implementations
+//!
+//! This crate implements the following storage traits:
+//! - [`UserStorage`](torii_core::storage::UserStorage) - User account management
+//! - [`SessionStorage`](torii_core::storage::SessionStorage) - Session management
+//! - Password repository for secure password storage
+//! - OAuth repository for third-party authentication
+//! - Passkey repository for WebAuthn support
+//! - Magic link repository for passwordless authentication
+//!
+//! # Database Schema
+//!
+//! The PostgreSQL schema includes tables for:
+//! - `users` - User accounts and profile information
+//! - `sessions` - Active user sessions
+//! - `passwords` - Hashed password credentials
+//! - `oauth_accounts` - Connected OAuth accounts
+//! - `passkeys` - WebAuthn passkey credentials
+//! - `passkey_challenges` - Temporary passkey challenges
+//! - `magic_links` - Magic link tokens and metadata
+//!
+//! All tables include appropriate indexes and constraints for optimal query performance and data integrity.
+
 mod magic_link;
 mod migrations;
 mod oauth;
@@ -271,19 +338,19 @@ mod tests {
         let db_name = format!("torii_test_{}", rand::rng().random_range(1..i64::MAX));
 
         // Drop the database if it exists
-        sqlx::query(format!("DROP DATABASE IF EXISTS {}", db_name).as_str())
+        sqlx::query(format!("DROP DATABASE IF EXISTS {db_name}").as_str())
             .execute(&pool)
             .await
             .expect("Failed to drop database");
 
         // Create a new database for the test
-        sqlx::query(format!("CREATE DATABASE {}", db_name).as_str())
+        sqlx::query(format!("CREATE DATABASE {db_name}").as_str())
             .execute(&pool)
             .await
             .expect("Failed to create database");
 
         let pool = PgPool::connect(
-            format!("postgres://postgres:postgres@localhost:5432/{}", db_name).as_str(),
+            format!("postgres://postgres:postgres@localhost:5432/{db_name}").as_str(),
         )
         .await
         .expect("Failed to create pool");
@@ -301,7 +368,7 @@ mod tests {
             .create_user(
                 &NewUser::builder()
                     .id(id.clone())
-                    .email(format!("test{}@example.com", id))
+                    .email(format!("test{id}@example.com"))
                     .build()
                     .expect("Failed to build user"),
             )
