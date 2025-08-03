@@ -1,11 +1,11 @@
 use crate::{
     Error, OAuthAccount, Session, SessionStorage, User, UserId,
     repositories::{
-        MagicLinkRepository, OAuthRepository, PasskeyCredential, PasskeyRepository,
-        PasswordRepository, RepositoryProvider, SessionRepository, UserRepository,
+        OAuthRepository, PasskeyCredential, PasskeyRepository, PasswordRepository,
+        RepositoryProvider, SessionRepository, TokenRepository, UserRepository,
     },
     session::SessionToken,
-    storage::{MagicToken, NewUser},
+    storage::{NewUser, SecureToken, TokenPurpose},
 };
 use async_trait::async_trait;
 use chrono::Duration;
@@ -90,25 +90,23 @@ impl<R: RepositoryProvider> SessionRepository for SessionRepositoryAdapter<R> {
 /// This allows the adapter to be used with the OpaqueSessionProvider
 #[async_trait]
 impl<R: RepositoryProvider> SessionStorage for SessionRepositoryAdapter<R> {
-    type Error = Error;
-
-    async fn create_session(&self, session: &Session) -> Result<Session, Self::Error> {
+    async fn create_session(&self, session: &Session) -> Result<Session, Error> {
         self.create(session.clone()).await
     }
 
-    async fn get_session(&self, token: &SessionToken) -> Result<Option<Session>, Self::Error> {
+    async fn get_session(&self, token: &SessionToken) -> Result<Option<Session>, Error> {
         self.find_by_token(token).await
     }
 
-    async fn delete_session(&self, token: &SessionToken) -> Result<(), Self::Error> {
+    async fn delete_session(&self, token: &SessionToken) -> Result<(), Error> {
         self.delete(token).await
     }
 
-    async fn cleanup_expired_sessions(&self) -> Result<(), Self::Error> {
+    async fn cleanup_expired_sessions(&self) -> Result<(), Error> {
         self.cleanup_expired().await
     }
 
-    async fn delete_sessions_for_user(&self, user_id: &UserId) -> Result<(), Self::Error> {
+    async fn delete_sessions_for_user(&self, user_id: &UserId) -> Result<(), Error> {
         self.delete_by_user_id(user_id).await
     }
 }
@@ -281,30 +279,44 @@ impl<R: RepositoryProvider> PasskeyRepository for PasskeyRepositoryAdapter<R> {
     }
 }
 
-pub struct MagicLinkRepositoryAdapter<R: RepositoryProvider> {
+/// Adapter that wraps a RepositoryProvider and implements TokenRepository
+pub struct TokenRepositoryAdapter<R: RepositoryProvider> {
     provider: Arc<R>,
 }
 
-impl<R: RepositoryProvider> MagicLinkRepositoryAdapter<R> {
+impl<R: RepositoryProvider> TokenRepositoryAdapter<R> {
     pub fn new(provider: Arc<R>) -> Self {
         Self { provider }
     }
 }
 
 #[async_trait]
-impl<R: RepositoryProvider> MagicLinkRepository for MagicLinkRepositoryAdapter<R> {
-    async fn create_token(&self, email: &str, expires_in: Duration) -> Result<MagicToken, Error> {
+impl<R: RepositoryProvider> TokenRepository for TokenRepositoryAdapter<R> {
+    async fn create_token(
+        &self,
+        user_id: &UserId,
+        purpose: TokenPurpose,
+        expires_in: Duration,
+    ) -> Result<SecureToken, Error> {
         self.provider
-            .magic_link()
-            .create_token(email, expires_in)
+            .token()
+            .create_token(user_id, purpose, expires_in)
             .await
     }
 
-    async fn verify_token(&self, token: &str) -> Result<Option<String>, Error> {
-        self.provider.magic_link().verify_token(token).await
+    async fn verify_token(
+        &self,
+        token: &str,
+        purpose: TokenPurpose,
+    ) -> Result<Option<SecureToken>, Error> {
+        self.provider.token().verify_token(token, purpose).await
+    }
+
+    async fn check_token(&self, token: &str, purpose: TokenPurpose) -> Result<bool, Error> {
+        self.provider.token().check_token(token, purpose).await
     }
 
     async fn cleanup_expired_tokens(&self) -> Result<(), Error> {
-        self.provider.magic_link().cleanup_expired_tokens().await
+        self.provider.token().cleanup_expired_tokens().await
     }
 }

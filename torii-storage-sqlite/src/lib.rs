@@ -49,7 +49,6 @@
 //! - Password repository for secure password storage
 //! - OAuth repository for third-party authentication
 //! - Passkey repository for WebAuthn support
-//! - Magic link repository for passwordless authentication
 //!
 //! # Database Schema
 //!
@@ -60,11 +59,9 @@
 //! - `oauth_accounts` - Connected OAuth accounts
 //! - `passkeys` - WebAuthn passkey credentials
 //! - `passkey_challenges` - Temporary passkey challenges
-//! - `magic_links` - Magic link tokens and metadata
 //!
 //! All tables include appropriate indexes for optimal query performance.
 
-mod magic_link;
 mod migrations;
 mod oauth;
 mod passkey;
@@ -76,7 +73,6 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use migrations::CreateIndexes;
-use migrations::CreateMagicLinksTable;
 use migrations::{
     CreateOAuthAccountsTable, CreatePasskeyChallengesTable, CreatePasskeysTable,
     CreateSessionsTable, CreateUsersTable, SqliteMigrationManager,
@@ -124,7 +120,6 @@ impl SqliteStorage {
             Box::new(CreatePasskeysTable),
             Box::new(CreatePasskeyChallengesTable),
             Box::new(CreateIndexes),
-            Box::new(CreateMagicLinksTable),
         ];
         manager.up(&migrations).await.map_err(|e| {
             tracing::error!(error = %e, "Failed to run migrations");
@@ -183,9 +178,7 @@ impl From<User> for SqliteUser {
 
 #[async_trait]
 impl UserStorage for SqliteStorage {
-    type Error = StorageError;
-
-    async fn create_user(&self, user: &NewUser) -> Result<User, Self::Error> {
+    async fn create_user(&self, user: &NewUser) -> Result<User, torii_core::Error> {
         let now = Utc::now();
         let user = sqlx::query_as::<_, SqliteUser>(
             r#"
@@ -213,7 +206,7 @@ impl UserStorage for SqliteStorage {
         Ok(user.into())
     }
 
-    async fn get_user(&self, id: &UserId) -> Result<Option<User>, Self::Error> {
+    async fn get_user(&self, id: &UserId) -> Result<Option<User>, torii_core::Error> {
         let user = sqlx::query_as::<_, SqliteUser>(
             r#"
             SELECT id, email, name, email_verified_at, created_at, updated_at 
@@ -236,7 +229,7 @@ impl UserStorage for SqliteStorage {
         }
     }
 
-    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, Self::Error> {
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, torii_core::Error> {
         let user = sqlx::query_as::<_, SqliteUser>(
             r#"
             SELECT id, email, name, email_verified_at, created_at, updated_at 
@@ -259,7 +252,7 @@ impl UserStorage for SqliteStorage {
         }
     }
 
-    async fn get_or_create_user_by_email(&self, email: &str) -> Result<User, Self::Error> {
+    async fn get_or_create_user_by_email(&self, email: &str) -> Result<User, torii_core::Error> {
         let user = self.get_user_by_email(email).await?;
         if let Some(user) = user {
             return Ok(user);
@@ -282,7 +275,7 @@ impl UserStorage for SqliteStorage {
         Ok(user)
     }
 
-    async fn update_user(&self, user: &User) -> Result<User, Self::Error> {
+    async fn update_user(&self, user: &User) -> Result<User, torii_core::Error> {
         let now = Utc::now();
         let user = sqlx::query_as::<_, SqliteUser>(
             r#"
@@ -310,7 +303,7 @@ impl UserStorage for SqliteStorage {
         Ok(user.into())
     }
 
-    async fn delete_user(&self, id: &UserId) -> Result<(), Self::Error> {
+    async fn delete_user(&self, id: &UserId) -> Result<(), torii_core::Error> {
         sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id.as_str())
             .execute(&self.pool)
@@ -323,7 +316,7 @@ impl UserStorage for SqliteStorage {
         Ok(())
     }
 
-    async fn set_user_email_verified(&self, user_id: &UserId) -> Result<(), Self::Error> {
+    async fn set_user_email_verified(&self, user_id: &UserId) -> Result<(), torii_core::Error> {
         sqlx::query("UPDATE users SET email_verified_at = ? WHERE id = ?")
             .bind(Utc::now().timestamp())
             .bind(user_id.as_str())
@@ -376,7 +369,7 @@ mod tests {
     pub(crate) async fn create_test_user(
         storage: &SqliteStorage,
         id: &str,
-    ) -> Result<User, StorageError> {
+    ) -> Result<User, torii_core::Error> {
         storage
             .create_user(
                 &NewUser::builder()

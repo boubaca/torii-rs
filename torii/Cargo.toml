@@ -1,19 +1,23 @@
 [package]
 name = "torii"
-version = "0.3.1"
+version = "0.5.2"
 description = "A modular authentication ecosystem for Rust applications"
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true # build docs with all features enabled
+
 [dependencies]
-torii-core = { path = "../torii-core", version = "0.3.1" }
-torii-storage-sqlite = { path = "../torii-storage-sqlite", version = "0.3.1", optional = true }
-torii-storage-postgres = { path = "../torii-storage-postgres", version = "0.3.1", optional = true }
-torii-storage-seaorm = { path = "../torii-storage-seaorm", version = "0.3.1", optional = true }
+torii-core = { path = "../torii-core", version = "0.5.1", default-features = false }
+torii-storage-sqlite = { path = "../torii-storage-sqlite", version = "0.5.1", optional = true }
+torii-storage-postgres = { path = "../torii-storage-postgres", version = "0.5.1", optional = true }
+torii-storage-seaorm = { path = "../torii-storage-seaorm", version = "0.5.1", optional = true }
+torii-mailer = { path = "../torii-mailer", version = "0.5.1", optional = true }
 
 # dependencies
-chrono.workspace = true # TODO: Make this optional and expose std::time::Duration in APIs
+chrono.workspace = true     # TODO: Make this optional and expose std::time::Duration in APIs
 tracing.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
@@ -21,7 +25,11 @@ serde.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
-testcontainers-modules = { version = "0.12.0", features = ["postgres", "mysql", "mariadb"] }
+testcontainers-modules = { version = "0.12.0", features = [
+    "postgres",
+    "mysql",
+    "mariadb",
+] }
 tracing-subscriber = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-rustls"] }
 
@@ -36,10 +44,18 @@ postgres = ["dep:torii-storage-postgres"]
 seaorm-sqlite = ["dep:torii-storage-seaorm", "torii-storage-seaorm/sqlite"]
 seaorm-postgres = ["dep:torii-storage-seaorm", "torii-storage-seaorm/postgres"]
 seaorm-mysql = ["dep:torii-storage-seaorm", "torii-storage-seaorm/mysql"]
-seaorm = ["dep:torii-storage-seaorm", "torii-storage-seaorm/sqlite", "torii-storage-seaorm/postgres", "torii-storage-seaorm/mysql"]
+seaorm = [
+    "dep:torii-storage-seaorm",
+    "torii-storage-seaorm/sqlite",
+    "torii-storage-seaorm/postgres",
+    "torii-storage-seaorm/mysql",
+]
 
 # auth features (now implemented as services in torii-core)
 password = []
 oauth = []
 passkey = []
 magic-link = []
+
+# mailer feature
+mailer = ["dep:torii-mailer", "torii-core/mailer"]

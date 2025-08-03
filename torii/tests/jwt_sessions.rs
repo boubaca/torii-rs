@@ -6,7 +6,7 @@ use torii_core::repositories::RepositoryProvider;
 use torii_core::{JwtConfig, SessionToken};
 
 #[cfg(feature = "sqlite")]
-use torii::SqliteRepositoryProvider;
+use torii::sqlite::SqliteRepositoryProvider;
 
 // Test secret for HS256
 const TEST_HS256_SECRET: &[u8] = b"this_is_a_test_secret_key_for_hs256_jwt_tokens_not_for_prod";
@@ -28,7 +28,8 @@ async fn test_jwt_session_manager() {
 
     // Create a user first
     let user = torii
-        .register_user_with_password("test@example.com", "password123")
+        .password()
+        .register("test@example.com", "password123")
         .await
         .unwrap();
 
@@ -73,7 +74,8 @@ async fn test_jwt_expiration() {
 
     // Create a user first
     let user = torii
-        .register_user_with_password("test@example.com", "password123")
+        .password()
+        .register("test@example.com", "password123")
         .await
         .unwrap();
 
@@ -110,7 +112,8 @@ async fn test_password_auth_with_jwt() {
 
     // Register a user
     let user = torii
-        .register_user_with_password("test@example.com", "password123")
+        .password()
+        .register("test@example.com", "password123")
         .await
         .unwrap();
 
@@ -119,7 +122,8 @@ async fn test_password_auth_with_jwt() {
 
     // Login with password
     let (user, session) = torii
-        .login_user_with_password("test@example.com", "password123", None, None)
+        .password()
+        .authenticate("test@example.com", "password123", None, None)
         .await
         .unwrap();
 
@@ -140,7 +144,8 @@ async fn test_password_auth_with_jwt() {
 
     // Try with incorrect password
     let result = torii
-        .login_user_with_password("test@example.com", "wrong-password", None, None)
+        .password()
+        .authenticate("test@example.com", "wrong-password", None, None)
         .await;
     assert!(result.is_err());
 }

@@ -47,14 +47,14 @@ Add Torii to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-torii = { version = "0.2.0", features = ["sqlite", "password"] }
+torii = { version = "0.4.0", features = ["sqlite", "password"] }
 ```
 
 Basic usage example:
 
 ```rust
 use torii::Torii;
-use torii_storage_sqlite::SqliteStorage;
+use torii::sqlite::SqliteStorage;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -68,13 +68,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let torii = Torii::new(repositories);
     
     // Register a user
-    let user = torii.register_user_with_password(
+    let user = torii.password().register(
         "user@example.com", 
         "secure_password"
     ).await?;
     
     // Login user
-    let (user, session) = torii.login_user_with_password(
+    let (user, session) = torii.password().authenticate(
         "user@example.com", 
         "secure_password",
         None, // user_agent
@@ -83,6 +83,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("User logged in: {}", user.email);
     Ok(())
+}
+```
+
+### Axum Integration
+
+For web applications, use the `torii-axum` crate for plug-and-play integration:
+
+```toml
+[dependencies]
+torii-axum = { version = "0.4.0", features = ["sqlite", "password"] }
+```
+
+```rust
+use torii_axum::{AuthRoutes, CookieConfig, AuthUser};
+use axum::{routing::get, Router, Json};
+
+#[tokio::main]
+async fn main() {
+    let storage = /* ... setup storage ... */;
+    let torii = /* ... setup torii ... */;
+    
+    // Create authentication routes with cookie configuration
+    let auth_routes = AuthRoutes::new(torii.clone())
+        .with_cookie_config(CookieConfig::development());
+    
+    // Build your application with auth routes
+    let app = Router::new()
+        .route("/protected", get(protected_handler))
+        .merge(auth_routes.into_router())
+        .with_state(torii);
+    
+    // Start server
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+
+// Protected route handler
+async fn protected_handler(user: AuthUser) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "user_id": user.id,
+        "email": user.email
+    }))
 }
 ```
 
@@ -102,9 +144,14 @@ The Torii project is organized into several crates:
 - **[`torii-storage-postgres`](./torii-storage-postgres/)** - PostgreSQL storage implementation  
 - **[`torii-storage-seaorm`](./torii-storage-seaorm/)** - Multi-database storage via SeaORM (SQLite, PostgreSQL, MySQL)
 
+### Integration Crates
+
+- **[`torii-axum`](./torii-axum/)** - Plug-and-play Axum integration with routes, middleware, and extractors
+
 ### Examples
 
 - **[`examples/todos`](./examples/todos/)** - Complete todo application demonstrating Torii integration
+- **[`examples/axum-example`](./examples/axum-example/)** - Complete Axum web server with SQLite, password authentication, and email support
 
 ## Architecture
 

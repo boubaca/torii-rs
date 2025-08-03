@@ -1,17 +1,17 @@
 //! Repository implementations for SQLite storage
 
-pub mod magic_link;
 pub mod oauth;
 pub mod passkey;
 pub mod password;
 pub mod session;
+pub mod token;
 pub mod user;
 
-pub use magic_link::SqliteMagicLinkRepository;
 pub use oauth::SqliteOAuthRepository;
 pub use passkey::SqlitePasskeyRepository;
 pub use password::SqlitePasswordRepository;
 pub use session::SqliteSessionRepository;
+pub use token::SqliteTokenRepository;
 pub use user::SqliteUserRepository;
 
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ pub struct SqliteRepositoryProvider {
     password: Arc<SqlitePasswordRepository>,
     oauth: Arc<SqliteOAuthRepository>,
     passkey: Arc<SqlitePasskeyRepository>,
-    magic_link: Arc<SqliteMagicLinkRepository>,
+    token: Arc<SqliteTokenRepository>,
 }
 
 impl SqliteRepositoryProvider {
@@ -37,7 +37,7 @@ impl SqliteRepositoryProvider {
         let password = Arc::new(SqlitePasswordRepository::new(pool.clone()));
         let oauth = Arc::new(SqliteOAuthRepository::new(pool.clone()));
         let passkey = Arc::new(SqlitePasskeyRepository::new(pool.clone()));
-        let magic_link = Arc::new(SqliteMagicLinkRepository::new(pool.clone()));
+        let token = Arc::new(SqliteTokenRepository::new(pool.clone()));
 
         Self {
             pool,
@@ -46,7 +46,7 @@ impl SqliteRepositoryProvider {
             password,
             oauth,
             passkey,
-            magic_link,
+            token,
         }
     }
 }
@@ -58,8 +58,7 @@ impl RepositoryProvider for SqliteRepositoryProvider {
     type Password = SqlitePasswordRepository;
     type OAuth = SqliteOAuthRepository;
     type Passkey = SqlitePasskeyRepository;
-    type MagicLink = SqliteMagicLinkRepository;
-    type Error = Error;
+    type Token = SqliteTokenRepository;
 
     fn user(&self) -> &Self::User {
         &self.user
@@ -81,15 +80,14 @@ impl RepositoryProvider for SqliteRepositoryProvider {
         &self.passkey
     }
 
-    fn magic_link(&self) -> &Self::MagicLink {
-        &self.magic_link
+    fn token(&self) -> &Self::Token {
+        &self.token
     }
 
-    async fn migrate(&self) -> Result<(), Self::Error> {
+    async fn migrate(&self) -> Result<(), torii_core::Error> {
         use crate::migrations::{
-            CreateIndexes, CreateMagicLinksTable, CreateOAuthAccountsTable,
-            CreatePasskeyChallengesTable, CreatePasskeysTable, CreateSessionsTable,
-            CreateUsersTable, SqliteMigrationManager,
+            CreateIndexes, CreateOAuthAccountsTable, CreatePasskeyChallengesTable,
+            CreatePasskeysTable, CreateSessionsTable, CreateUsersTable, SqliteMigrationManager,
         };
         use torii_migration::{Migration, MigrationManager};
 
@@ -108,7 +106,6 @@ impl RepositoryProvider for SqliteRepositoryProvider {
             Box::new(CreatePasskeysTable),
             Box::new(CreatePasskeyChallengesTable),
             Box::new(CreateIndexes),
-            Box::new(CreateMagicLinksTable),
         ];
         manager.up(&migrations).await.map_err(|e| {
             tracing::error!(error = %e, "Failed to run migrations");
@@ -120,7 +117,7 @@ impl RepositoryProvider for SqliteRepositoryProvider {
         Ok(())
     }
 
-    async fn health_check(&self) -> Result<(), Self::Error> {
+    async fn health_check(&self) -> Result<(), torii_core::Error> {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await

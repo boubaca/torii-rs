@@ -1,3 +1,5 @@
+pub mod utilities;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,6 +18,9 @@ pub enum Error {
 
     #[error("Session error: {0}")]
     Session(#[from] SessionError),
+
+    #[error("Cryptographic error: {0}")]
+    Crypto(#[from] CryptoError),
 }
 
 #[derive(Debug, Error)]
@@ -55,9 +60,6 @@ pub enum SessionError {
 
     #[error("Invalid token: {0}")]
     InvalidToken(String),
-
-    #[error("JWT verification failed: {0}")]
-    JwtVerification(String),
 }
 
 #[derive(Debug, Error)]
@@ -73,6 +75,9 @@ pub enum StorageError {
 
     #[error("Record not found")]
     NotFound,
+
+    #[error("Constraint violation: {0}")]
+    Constraint(String),
 }
 
 #[derive(Debug, Error)]
@@ -80,8 +85,20 @@ pub enum ValidationError {
     #[error("Invalid email format: {0}")]
     InvalidEmail(String),
 
+    #[error("Invalid password: {0}")]
+    InvalidPassword(String),
+
     #[error("Weak password")]
     WeakPassword,
+
+    #[error("Invalid name: {0}")]
+    InvalidName(String),
+
+    #[error("Invalid user ID: {0}")]
+    InvalidUserId(String),
+
+    #[error("Invalid provider: {0}")]
+    InvalidProvider(String),
 
     #[error("Invalid field: {0}")]
     InvalidField(String),
@@ -97,6 +114,21 @@ pub enum EventError {
 
     #[error("Event handler error: {0}")]
     HandlerError(String),
+}
+
+#[derive(Debug, Error)]
+pub enum CryptoError {
+    #[error("JWT signing failed: {0}")]
+    JwtSigning(String),
+
+    #[error("JWT verification failed: {0}")]
+    JwtVerification(String),
+
+    #[error("Password hashing failed: {0}")]
+    PasswordHash(String),
+
+    #[error("Passkey operation failed: {0}")]
+    Passkey(String),
 }
 
 impl Error {
@@ -117,6 +149,18 @@ impl Error {
                 | Error::Validation(ValidationError::InvalidField(_))
                 | Error::Validation(ValidationError::MissingField(_))
         )
+    }
+
+    pub fn is_storage_error(&self) -> bool {
+        matches!(self, Error::Storage(_))
+    }
+
+    pub fn is_session_error(&self) -> bool {
+        matches!(self, Error::Session(_))
+    }
+
+    pub fn is_crypto_error(&self) -> bool {
+        matches!(self, Error::Crypto(_))
     }
 }
 

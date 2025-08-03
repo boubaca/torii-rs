@@ -1,17 +1,17 @@
 //! Repository implementations for SeaORM storage
 
-pub mod magic_link;
 pub mod oauth;
 pub mod passkey;
 pub mod password;
 pub mod session;
+pub mod token;
 pub mod user;
 
-pub use magic_link::SeaORMMagicLinkRepository;
 pub use oauth::SeaORMOAuthRepository;
 pub use passkey::SeaORMPasskeyRepository;
 pub use password::SeaORMPasswordRepository;
 pub use session::SeaORMSessionRepository;
+pub use token::SeaORMTokenRepository;
 pub use user::SeaORMUserRepository;
 
 use crate::SeaORMStorageError;
@@ -28,7 +28,7 @@ pub struct SeaORMRepositoryProvider {
     password: Arc<SeaORMPasswordRepository>,
     oauth: Arc<SeaORMOAuthRepository>,
     passkey: Arc<SeaORMPasskeyRepository>,
-    magic_link: Arc<SeaORMMagicLinkRepository>,
+    token: Arc<SeaORMTokenRepository>,
 }
 
 impl SeaORMRepositoryProvider {
@@ -38,7 +38,7 @@ impl SeaORMRepositoryProvider {
         let password = Arc::new(SeaORMPasswordRepository::new(pool.clone()));
         let oauth = Arc::new(SeaORMOAuthRepository::new(pool.clone()));
         let passkey = Arc::new(SeaORMPasskeyRepository::new(pool.clone()));
-        let magic_link = Arc::new(SeaORMMagicLinkRepository::new(pool.clone()));
+        let token = Arc::new(SeaORMTokenRepository::new(pool.clone()));
 
         Self {
             pool,
@@ -47,7 +47,7 @@ impl SeaORMRepositoryProvider {
             password,
             oauth,
             passkey,
-            magic_link,
+            token,
         }
     }
 }
@@ -59,8 +59,7 @@ impl RepositoryProvider for SeaORMRepositoryProvider {
     type Password = SeaORMPasswordRepository;
     type OAuth = SeaORMOAuthRepository;
     type Passkey = SeaORMPasskeyRepository;
-    type MagicLink = SeaORMMagicLinkRepository;
-    type Error = Error;
+    type Token = SeaORMTokenRepository;
 
     fn user(&self) -> &Self::User {
         &self.user
@@ -82,11 +81,11 @@ impl RepositoryProvider for SeaORMRepositoryProvider {
         &self.passkey
     }
 
-    fn magic_link(&self) -> &Self::MagicLink {
-        &self.magic_link
+    fn token(&self) -> &Self::Token {
+        &self.token
     }
 
-    async fn migrate(&self) -> Result<(), Self::Error> {
+    async fn migrate(&self) -> Result<(), torii_core::Error> {
         use crate::migrations::Migrator;
         use sea_orm_migration::MigratorTrait;
 
@@ -96,7 +95,7 @@ impl RepositoryProvider for SeaORMRepositoryProvider {
         Ok(())
     }
 
-    async fn health_check(&self) -> Result<(), Self::Error> {
+    async fn health_check(&self) -> Result<(), torii_core::Error> {
         self.pool
             .ping()
             .await
